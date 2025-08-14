@@ -23,17 +23,23 @@
   </div>
 
   <script>
-    // Subreddits: keep short, witty, mostly SFW
+    
     const SUBREDDITS = [
-      "UnusualAffirmations",
-      "Affirmations",
-      "PickupLines",
-      "clevercomebacks",
-      "Showerthoughts",
-      "Oneliners",
-      "dadjokes",
-      "punny"
-    ];
+    "UnusualAffirmations",    
+    "Affirmations",           
+    "PickupLines",            
+    "clevercomebacks",       
+    "Showerthoughts",         
+    "Oneliners",              
+    "dadjokes",               
+    "punny",                  
+    "contagiouslaughter",     
+    "me_irl",                 
+    "rareinsults",            
+    "firstworldanarchists",   
+    "funny",             
+];
+
 
     const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
     const BANNED = ["suicide", "nsfw", "18+", "politics", "trigger"];
@@ -61,8 +67,7 @@
       const data = await res.json();
       const posts = (data?.data?.children || []).map(c => c.data || {});
       const cleaned = [];
-      for (const d of posts) {
-        if (d.over_18) continue;           // NSFW off
+      for (const d of posts) {           // NSFW off
         if (isMediaPost(d)) continue;      // text-only
         const title = (d.title || "").trim();
         const selftext = (d.selftext || "").trim();
