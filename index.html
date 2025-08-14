@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>🫶 Funny Affirmations</title>
+  <meta name="description" content="Click for a random, text-only funny affirmation gathered from Reddit."/>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 40px; }
+    .card { max-width: 680px; margin: auto; padding: 24px; border: 1px solid #4443; border-radius: 12px; box-shadow: 0 8px 30px #0001; }
+    button, a { cursor: pointer; display: inline-block; padding: 10px 16px; border-radius: 10px; border: 1px solid #4443; text-decoration: none; }
+    .big { font-size: 1.3rem; line-height: 1.5; }
+    .muted { color: #666; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>🫶 Funny Affirmations</h1>
+    <p class="muted">Click the link to summon a ridiculous pick‑me‑up.</p>
+    <p><a id="fetchLink" href="#">✨ give me one</a></p>
+    <p class="big" id="line">…</p>
+    <p class="muted" id="meta"></p>
+  </div>
+
+  <script>
+    // Subreddits: keep short, witty, mostly SFW
+    const SUBREDDITS = [
+      "UnusualAffirmations",
+      "Affirmations",
+      "PickupLines",
+      "clevercomebacks",
+      "Showerthoughts",
+      "Oneliners",
+      "dadjokes",
+      "punny"
+    ];
+
+    const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+    const BANNED = ["suicide", "nsfw", "18+", "politics", "trigger"];
+
+    const looksFunny = (text) => {
+      if (!text) return false;
+      if (text.length > 220) return false;
+      const low = text.toLowerCase();
+      return !BANNED.some(b => low.includes(b));
+    };
+
+    const isMediaPost = (d) => {
+      const url = (d.url_overridden_by_dest || d.url || "").toLowerCase();
+      if (d.is_gallery) return true;
+      if (["image","hosted:video","rich:video","link"].includes(d.post_hint)) return true;
+      return [".jpg",".jpeg",".png",".gif",".webp",".mp4",".gifv",".webm"].some(ext => url.endsWith(ext));
+    };
+
+    async function fetchTop(sub) {
+      const res = await fetch(`https://www.reddit.com/r/${sub}/top.json?t=month&limit=100`, {
+        headers: { "Accept": "application/json" },
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(`Bad status for r/${sub}: ${res.status}`);
+      const data = await res.json();
+      const posts = (data?.data?.children || []).map(c => c.data || {});
+      const cleaned = [];
+      for (const d of posts) {
+        if (d.over_18) continue;           // NSFW off
+        if (isMediaPost(d)) continue;      // text-only
+        const title = (d.title || "").trim();
+        const selftext = (d.selftext || "").trim();
+        const firstLine = selftext.split("\n", 1)[0].trim();
+        const line = looksFunny(title) ? title : (looksFunny(firstLine) ? firstLine : "");
+        if (!line) continue;
+        cleaned.push({
+          line,
+          permalink: `https://www.reddit.com${d.permalink || ""}`,
+          subreddit: sub,
+          ups: d.ups || 0
+        });
+      }
+      return cleaned;
+    }
+
+    async function getAll() {
+      // localStorage cache
+      try {
+        const raw = localStorage.getItem("affirmations_cache_v1");
+        if (raw) {
+          const { items, ts } = JSON.parse(raw);
+          if (Date.now() - ts < CACHE_TTL_MS && Array.isArray(items) && items.length) {
+            return items;
+          }
+        }
+      } catch {}
+
+      // fetch all subs in parallel (soft-fail some)
+      const results = await Promise.allSettled(SUBREDDITS.map(fetchTop));
+      const all = results.flatMap(r => r.status === "fulfilled" ? r.value : []);
+      // dedupe by lowercased text, keep highest upvotes
+      const dedup = {};
+      for (const it of all) {
+        const k = it.line.toLowerCase();
+        if (!dedup[k] || it.ups > dedup[k].ups) dedup[k] = it;
+      }
+      const items = Object.values(dedup);
+
+      try { localStorage.setItem("affirmations_cache_v1", JSON.stringify({ items, ts: Date.now() })); } catch {}
+      return items;
+    }
+
+    const link = document.getElementById('fetchLink');
+    const line = document.getElementById('line');
+    const meta = document.getElementById('meta');
+
+    let pool = [];
+    async function ensurePool() {
+      if (pool.length) return;
+      line.textContent = 'loading…';
+      meta.textContent = '';
+      pool = await getAll();
+      if (!pool.length) {
+        line.textContent = 'No lines right now — try again soon.';
+      }
+    }
+
+    async function showOne() {
+      await ensurePool();
+      if (!pool.length) return;
+      const item = pool[Math.floor(Math.random() * pool.length)];
+      line.textContent = '“' + item.line + '”';
+      meta.innerHTML = `from <b>r/${item.subreddit}</b> • <a href="${item.permalink}" target="_blank" rel="noopener">source</a> • ${item.ups} upvotes`;
+    }
+
+    link.addEventListener('click', (e) => { e.preventDefault(); showOne(); });
+    // Load one on first visit
+    showOne();
+  </script>
+</body>
+</html>
